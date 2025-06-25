@@ -2,12 +2,12 @@
 
 **ClassAlign** is a clean, personal class scheduling tool built with **Next.js**, **TailwindCSS**, and **Supabase** — designed for teachers, department members, or anyone needing a smart way to organize their weekly classroom schedules.
 
-It combines manual scheduling with AI-powered suggestions via **OpenRouter** (TempoAI), helping users avoid time conflicts and plan smarter.
+It combines manual scheduling with AI-powered suggestions using OpenRouter, helping users avoid time conflicts and plan smarter.
 
 > ⚠️ **Note:** This project is currently **under active development**.  
-> It is being built by a BSIT student as a capstone-style tool, with continuous improvements in both functionality and design.
+> I created this so that anyone — especially students, teachers, or school staff — can easily manage their class schedules without the usual hassle.
 
-Stay tuned — more features and polish are coming soon!
+More features and polish are coming soon!
 
 ---
 
@@ -23,8 +23,8 @@ Stay tuned — more features and polish are coming soon!
   Assign subjects to rooms and timeslots easily
 
 - 🤖 AI Schedule Suggestion (via OpenRouter)  
-  Powered by Mistral or Qwen  
-  Prompts the AI to suggest free slots based on current data
+  Powered by free models like Mistral or Qwen  
+  Prompts the AI to suggest free time slots based on current data
 
 - 💾 Supabase Database Integration  
   All schedules are saved per-user  
@@ -61,4 +61,5 @@ If you're checking out the repo now, expect updates frequently!
 ## 🙌 Author
 
 Built by **Reiniel**, 3rd Year BSIT @ NEUST  
+Created so others can manage and organize school schedules more easily.  
 Feedback, stars ⭐, or PRs welcome!
