@@ -38,6 +38,7 @@ import {
   Printer,
   Download,
   FileText,
+  X,
 } from "lucide-react";
 import {
   Dialog,
@@ -49,6 +50,7 @@ import {
 } from "@/components/ui/dialog";
 import Link from "next/link";
 import { createClient } from "../../../supabase/client";
+import { toast } from "@/components/ui/use-toast";
 
 type ClassItem = {
   id: string;
@@ -99,6 +101,9 @@ export default function DashboardStoryboard() {
     id: "123e4567-e89b-12d3-a456-426614174000",
   };
 
+  // Floating AI Chat state
+  const [aiChatOpen, setAiChatOpen] = useState(false);
+
   // Fetch user and classes on mount
   useEffect(() => {
     const fetchClasses = async () => {
@@ -147,6 +152,11 @@ export default function DashboardStoryboard() {
       setAddClassLoading(false);
       return;
     }
+    // Show toast on success
+    toast({
+      title: "Class added!",
+      description: "Your class was added successfully.",
+    });
     // Refresh classes
     const { data, error: fetchError } = await supabase
       .from('classes')
@@ -305,18 +315,26 @@ export default function DashboardStoryboard() {
                   <div className="space-y-4 mt-4">
                     <div className="space-y-2">
                       <Label htmlFor="subject">Subject</Label>
-                      <Input id="subject" placeholder="e.g., Advanced Calculus" />
+                      <Input
+                        id="subject"
+                        placeholder="e.g., Advanced Calculus"
+                        value={addClassForm.subject}
+                        onChange={e => setAddClassForm({ ...addClassForm, subject: e.target.value })}
+                      />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="day">Day</Label>
-                        <Select>
+                        <Select
+                          value={addClassForm.day}
+                          onValueChange={value => setAddClassForm({ ...addClassForm, day: value })}
+                        >
                           <SelectTrigger>
                             <SelectValue placeholder="Select day" />
                           </SelectTrigger>
                           <SelectContent>
                             {days.map((day) => (
-                              <SelectItem key={day} value={day.toLowerCase()}>
+                              <SelectItem key={day} value={day}>
                                 {day}
                               </SelectItem>
                             ))}
@@ -325,46 +343,41 @@ export default function DashboardStoryboard() {
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="time">Time</Label>
-                        <Input id="time" placeholder="09:00 - 10:30" />
+                        <Input
+                          id="time"
+                          placeholder="09:00 - 10:30"
+                          value={addClassForm.time}
+                          onChange={e => setAddClassForm({ ...addClassForm, time: e.target.value })}
+                        />
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="room">Room</Label>
-                        <Input id="room" placeholder="e.g., Room A-101" />
+                        <Input
+                          id="room"
+                          placeholder="e.g., Room A-101"
+                          value={addClassForm.room}
+                          onChange={e => setAddClassForm({ ...addClassForm, room: e.target.value })}
+                        />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="professor">Professor</Label>
-                        <Input id="professor" placeholder="e.g., Dr. Smith" />
+                        <Input
+                          id="professor"
+                          placeholder="e.g., Dr. Smith"
+                          value={addClassForm.professor}
+                          onChange={e => setAddClassForm({ ...addClassForm, professor: e.target.value })}
+                        />
                       </div>
                     </div>
-                    <Button className="w-full">Add Class</Button>
+                    {addClassError && (
+                      <div className="text-red-500 text-sm">{addClassError}</div>
+                    )}
+                    <Button className="w-full" onClick={handleAddClass} disabled={addClassLoading}>
+                      {addClassLoading ? 'Adding...' : 'Add Class'}
+                    </Button>
                   </div>
-                </DialogContent>
-              </Dialog>
-              <Link href="/ai-chat">
-                <Button variant="outline" className="flex items-center gap-2">
-                  <Brain size={16} />
-                  AI Chat
-                </Button>
-              </Link>
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button variant="outline" className="flex items-center gap-2">
-                    <Brain size={16} />
-                    AI Suggestions
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2">
-                      <Brain size={20} /> AI Suggestions
-                    </DialogTitle>
-                    <DialogDescription>
-                      Get AI-powered analysis and suggestions for your current schedule.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <AIChatModalContent schedule={classes} />
                 </DialogContent>
               </Dialog>
               <Button
@@ -712,6 +725,33 @@ export default function DashboardStoryboard() {
               </div>
             </CardContent>
           </Card>
+        </div>
+        {/* Floating AI Chat Button & Overlay */}
+        <div>
+          {/* Floating Button */}
+          {!aiChatOpen && (
+            <button
+              className="fixed bottom-6 right-6 z-50 bg-purple-600 hover:bg-purple-700 text-white rounded-full shadow-lg w-16 h-16 flex items-center justify-center transition-all duration-200"
+              onClick={() => setAiChatOpen(true)}
+              aria-label="Open AI Chat"
+            >
+              <Brain size={32} />
+            </button>
+          )}
+          {/* Chat Overlay */}
+          {aiChatOpen && (
+            <div className="fixed bottom-6 right-6 z-50 w-[350px] max-w-[90vw] bg-white rounded-xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-4">
+              <div className="flex items-center justify-between px-4 py-2 border-b bg-purple-600 text-white">
+                <span className="font-semibold flex items-center gap-2"><Brain size={18} /> AI Chat</span>
+                <button onClick={() => setAiChatOpen(false)} aria-label="Close AI Chat" className="hover:text-gray-200">
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="p-2 bg-gray-50 flex-1 min-h-[350px] max-h-[400px] overflow-y-auto">
+                <AIChatModalContent schedule={classes} />
+              </div>
+            </div>
+          )}
         </div>
       </main>
     </div>
