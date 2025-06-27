@@ -64,6 +64,60 @@ type ClassItem = {
   created_at?: string;
 };
 
+function getTimeSlots(classes: { time?: string }[]): string[] {
+  // Helper to parse time string (e.g., '07:00') to minutes
+  const toMinutes = (t: string) => {
+    const [h, m] = t.split(":").map(Number);
+    return h * 60 + m;
+  };
+  // Helper to format minutes to 'h:mm AM/PM'
+  const toTime = (min: number) => {
+    let h = Math.floor(min / 60);
+    const m = min % 60;
+    const ampm = h >= 12 ? "PM" : "AM";
+    h = h % 12;
+    if (h === 0) h = 12;
+    return `${h}:${m.toString().padStart(2, "0")} ${ampm}`;
+  };
+  let minTime = 7 * 60; // 07:00
+  let maxTime = 18 * 60; // 18:00
+  classes.forEach((cls) => {
+    if (cls.time) {
+      // Support both 'HH:MM' and 'HH:MM - HH:MM'
+      const [start, end] = cls.time.split("-").map((s) => s.trim());
+      if (start && /^\d{2}:\d{2}$/.test(start)) {
+        minTime = Math.min(minTime, toMinutes(start));
+      }
+      if (end && /^\d{2}:\d{2}$/.test(end)) {
+        maxTime = Math.max(maxTime, toMinutes(end));
+      }
+    }
+  });
+  // Generate slots every hour from minTime to maxTime (inclusive)
+  const slots: string[] = [];
+  for (let t = minTime; t <= maxTime; t += 60) {
+    slots.push(toTime(t));
+  }
+  return slots;
+}
+
+// Move parseTimeToMinutes outside the component
+function parseTimeToMinutes(t: string): number {
+  t = t.trim();
+  if (/AM|PM/i.test(t)) {
+    // 12-hour format
+    const [time, ampm] = t.split(/\s+/);
+    let [h, m] = time.split(":").map(Number);
+    if (ampm.toUpperCase() === "PM" && h !== 12) h += 12;
+    if (ampm.toUpperCase() === "AM" && h === 12) h = 0;
+    return h * 60 + (m || 0);
+  } else {
+    // 24-hour format
+    const [h, m] = t.split(":").map(Number);
+    return h * 60 + (m || 0);
+  }
+}
+
 export default function DashboardStoryboard() {
   const supabase = createClient();
   const [classes, setClasses] = useState<ClassItem[]>([]);
@@ -94,19 +148,15 @@ export default function DashboardStoryboard() {
   const [chatInput, setChatInput] = useState("");
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
-  // Mock user data
-  const mockUser = {
-    email: "student@university.edu",
-    name: "Alex Johnson",
-    id: "123e4567-e89b-12d3-a456-426614174000",
-  };
+  // Add user state
+  const [userInfo, setUserInfo] = useState<{ name?: string; email?: string }>({});
 
   // Floating AI Chat state
   const [aiChatOpen, setAiChatOpen] = useState(false);
 
   // Fetch user and classes on mount
   useEffect(() => {
-    const fetchClasses = async () => {
+    const fetchUserAndClasses = async () => {
       setLoading(true);
       setError(null);
       const { data: { user }, error: userError } = await supabase.auth.getUser();
@@ -115,6 +165,11 @@ export default function DashboardStoryboard() {
         setLoading(false);
         return;
       }
+      // Set user info (prefer full_name, then name, then email)
+      setUserInfo({
+        name: user.user_metadata?.full_name || user.user_metadata?.name || user.email,
+        email: user.email,
+      });
       const { data, error } = await supabase
         .from('classes')
         .select('*')
@@ -128,7 +183,7 @@ export default function DashboardStoryboard() {
       setClasses(data || []);
       setLoading(false);
     };
-    fetchClasses();
+    fetchUserAndClasses();
   }, []);
 
   // Add class handler
@@ -169,25 +224,19 @@ export default function DashboardStoryboard() {
     setAddClassForm({ subject: "", day: "", time: "", room: "", professor: "", color: "" });
   };
 
-  const timeSlots = [
-    "08:00",
-    "09:00",
-    "10:00",
-    "11:00",
-    "12:00",
-    "13:00",
-    "14:00",
-    "15:00",
-    "16:00",
-    "17:00",
-  ];
+  // Replace timeSlots definition in component
+  const timeSlots = getTimeSlots(classes);
 
   const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
   const getClassForTimeSlot = (day: string, time: string) => {
     return classes.find((cls: ClassItem) => {
       const classStartTime = cls.time.split(" - ")[0];
-      return cls.day === day && classStartTime === time;
+      // Compare in minutes
+      return (
+        cls.day === day &&
+        parseTimeToMinutes(classStartTime) === parseTimeToMinutes(time)
+      );
     });
   };
 
@@ -271,7 +320,9 @@ export default function DashboardStoryboard() {
         heightLeft -= pageHeight;
       }
 
-      pdf.save(`${mockUser.name.replace(" ", "_")}_Schedule.pdf`);
+      // Use userInfo.name or fallback to email for PDF filename
+      const displayName = userInfo.name || userInfo.email || "Schedule";
+      pdf.save(`${displayName.replace(/\s+/g, "_")}_Schedule.pdf`);
     } catch (error) {
       console.error("Error generating PDF:", error);
       alert("Error generating PDF. Please try again.");
@@ -292,7 +343,7 @@ export default function DashboardStoryboard() {
                 ClassAlign Dashboard
               </h1>
               <p className="text-gray-600 mt-1">
-                Welcome back, {mockUser.name}!
+                Welcome back, {userInfo.name || userInfo.email || "User"}!
               </p>
             </div>
             <div className="flex gap-3">
