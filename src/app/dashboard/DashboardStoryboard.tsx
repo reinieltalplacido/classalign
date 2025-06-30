@@ -507,6 +507,17 @@ export default function DashboardStoryboard() {
                         />
                       </div>
                     </div>
+                    <div className="flex items-center gap-3 mt-4">
+                      <Label htmlFor="color" className="mb-0">Color</Label>
+                      <input
+                        id="color"
+                        type="color"
+                        value={addClassForm.color || "#a3a3a3"}
+                        onChange={e => setAddClassForm({ ...addClassForm, color: e.target.value })}
+                        className="w-8 h-8 border rounded shadow-sm cursor-pointer"
+                        style={{ padding: 0, background: 'none' }}
+                      />
+                    </div>
                     {addClassError && (
                       <div className="text-red-500 text-sm">{addClassError}</div>
                     )}
@@ -642,6 +653,7 @@ export default function DashboardStoryboard() {
                             {classData && (
                               <div
                                 className={`${classData.color ?? "bg-gray-200 text-black"} p-2 rounded text-xs h-full flex flex-col justify-between cursor-pointer hover:opacity-90 transition-opacity`}
+                                style={{ backgroundColor: classData.color || '#e5e7eb', color: '#000' }}
                               >
                                 <div>
                                   <div className="font-semibold truncate">
@@ -966,6 +978,17 @@ export default function DashboardStoryboard() {
                     onChange={e => setEditForm({ ...editForm, professor: e.target.value })}
                   />
                 </div>
+              </div>
+              <div className="flex items-center gap-3 mt-4">
+                <Label htmlFor="edit-color" className="mb-0">Color</Label>
+                <input
+                  id="edit-color"
+                  type="color"
+                  value={editForm.color || "#a3a3a3"}
+                  onChange={e => setEditForm({ ...editForm, color: e.target.value })}
+                  className="w-8 h-8 border rounded shadow-sm cursor-pointer"
+                  style={{ padding: 0, background: 'none' }}
+                />
               </div>
               {editError && <div className="text-red-500 text-sm">{editError}</div>}
               <Button className="w-full" onClick={handleEditClass} disabled={editLoading}>
