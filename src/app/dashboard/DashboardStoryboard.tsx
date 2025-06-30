@@ -154,6 +154,23 @@ export default function DashboardStoryboard() {
   // Floating AI Chat state
   const [aiChatOpen, setAiChatOpen] = useState(false);
 
+  // Add state for edit/delete modals and selected class
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [selectedClass, setSelectedClass] = useState<ClassItem | null>(null);
+  const [editForm, setEditForm] = useState({
+    subject: "",
+    day: "",
+    time: "",
+    room: "",
+    professor: "",
+    color: "",
+  });
+  const [editLoading, setEditLoading] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   // Fetch user and classes on mount
   useEffect(() => {
     const fetchUserAndClasses = async () => {
@@ -331,6 +348,74 @@ export default function DashboardStoryboard() {
     }
   };
 
+  // Edit handler
+  const handleEditClass = async () => {
+    if (!selectedClass) return;
+    setEditLoading(true);
+    setEditError(null);
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      setEditError("Could not get user. Please sign in.");
+      setEditLoading(false);
+      return;
+    }
+    const { error } = await supabase
+      .from('classes')
+      .update({ ...editForm })
+      .eq('id', selectedClass.id)
+      .eq('user_id', user.id);
+    if (error) {
+      setEditError("Failed to update class.");
+      setEditLoading(false);
+      return;
+    }
+    toast({ title: "Class updated!", description: "Your class was updated successfully." });
+    // Refresh classes
+    const { data, error: fetchError } = await supabase
+      .from('classes')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: true });
+    setClasses(data || []);
+    setEditLoading(false);
+    setEditModalOpen(false);
+    setSelectedClass(null);
+  };
+
+  // Delete handler
+  const handleDeleteClass = async () => {
+    if (!selectedClass) return;
+    setDeleteLoading(true);
+    setDeleteError(null);
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      setDeleteError("Could not get user. Please sign in.");
+      setDeleteLoading(false);
+      return;
+    }
+    const { error } = await supabase
+      .from('classes')
+      .delete()
+      .eq('id', selectedClass.id)
+      .eq('user_id', user.id);
+    if (error) {
+      setDeleteError("Failed to delete class.");
+      setDeleteLoading(false);
+      return;
+    }
+    toast({ title: "Class deleted!", description: "Your class was deleted successfully." });
+    // Refresh classes
+    const { data, error: fetchError } = await supabase
+      .from('classes')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: true });
+    setClasses(data || []);
+    setDeleteLoading(false);
+    setDeleteModalOpen(false);
+    setSelectedClass(null);
+  };
+
   return (
     <div className="bg-gray-50 min-h-screen">
       <DashboardNavbar />
@@ -347,7 +432,7 @@ export default function DashboardStoryboard() {
               </p>
             </div>
             <div className="flex gap-3">
-              <Dialog>
+              <Dialog open={addClassModalOpen} onOpenChange={setAddClassModalOpen}>
                 <DialogTrigger asChild>
                   <Button className="flex items-center gap-2">
                     <Plus size={16} />
@@ -574,6 +659,18 @@ export default function DashboardStoryboard() {
                                     size="sm"
                                     variant="ghost"
                                     className="h-5 w-5 p-0 hover:bg-white/20"
+                                    onClick={() => {
+                                      setSelectedClass(classData);
+                                      setEditForm({
+                                        subject: classData.subject || "",
+                                        day: classData.day || "",
+                                        time: classData.time || "",
+                                        room: classData.room || "",
+                                        professor: classData.professor || "",
+                                        color: classData.color || "",
+                                      });
+                                      setEditModalOpen(true);
+                                    }}
                                   >
                                     <Edit size={10} />
                                   </Button>
@@ -581,6 +678,10 @@ export default function DashboardStoryboard() {
                                     size="sm"
                                     variant="ghost"
                                     className="h-5 w-5 p-0 hover:bg-white/20"
+                                    onClick={() => {
+                                      setSelectedClass(classData);
+                                      setDeleteModalOpen(true);
+                                    }}
                                   >
                                     <Trash2 size={10} />
                                   </Button>
@@ -804,6 +905,93 @@ export default function DashboardStoryboard() {
             </div>
           )}
         </div>
+        {/* Edit Modal */}
+        <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Class</DialogTitle>
+              <DialogDescription>Update your class details below.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 mt-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-subject">Subject</Label>
+                <Input
+                  id="edit-subject"
+                  value={editForm.subject}
+                  onChange={e => setEditForm({ ...editForm, subject: e.target.value })}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-day">Day</Label>
+                  <Select
+                    value={editForm.day}
+                    onValueChange={value => setEditForm({ ...editForm, day: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select day" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {days.map((day) => (
+                        <SelectItem key={day} value={day}>
+                          {day}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-time">Time</Label>
+                  <Input
+                    id="edit-time"
+                    value={editForm.time}
+                    onChange={e => setEditForm({ ...editForm, time: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-room">Room</Label>
+                  <Input
+                    id="edit-room"
+                    value={editForm.room}
+                    onChange={e => setEditForm({ ...editForm, room: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-professor">Professor</Label>
+                  <Input
+                    id="edit-professor"
+                    value={editForm.professor}
+                    onChange={e => setEditForm({ ...editForm, professor: e.target.value })}
+                  />
+                </div>
+              </div>
+              {editError && <div className="text-red-500 text-sm">{editError}</div>}
+              <Button className="w-full" onClick={handleEditClass} disabled={editLoading}>
+                {editLoading ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+        {/* Delete Modal */}
+        <Dialog open={deleteModalOpen} onOpenChange={setDeleteModalOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete Class</DialogTitle>
+              <DialogDescription>Are you sure you want to delete this class? This action cannot be undone.</DialogDescription>
+            </DialogHeader>
+            {deleteError && <div className="text-red-500 text-sm mb-2">{deleteError}</div>}
+            <div className="flex gap-2 mt-4">
+              <Button variant="destructive" onClick={handleDeleteClass} disabled={deleteLoading}>
+                {deleteLoading ? 'Deleting...' : 'Delete'}
+              </Button>
+              <Button variant="outline" onClick={() => setDeleteModalOpen(false)} disabled={deleteLoading}>
+                Cancel
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </main>
     </div>
   );
