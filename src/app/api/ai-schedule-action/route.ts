@@ -7,65 +7,121 @@ export async function POST(req: NextRequest) {
   const supabase = createClient();
   const { prompt, schedule, user } = await req.json();
 
-  // 1. Use OpenAI or similar to parse the prompt for action and details
-  // For demo, we'll use a simple regex-based mock parser
-  // In production, replace this with a real LLM call
-  let action = null;
-  let classData: { subject?: string; day?: string; time?: string } = {};
-  let responseText = '';
-
-  const addMatch = prompt.match(/add (?:a|an)? ?(.+?) class on (\w+) at ([\d:apm ]+)/i);
-  const editMatch = prompt.match(/edit (.+?) class (.+)/i);
-  const deleteMatch = prompt.match(/delete (.+?) class/i);
-
-  if (addMatch) {
-    action = 'add';
-    classData = {
-      subject: addMatch[1],
-      day: addMatch[2],
-      time: addMatch[3],
-    };
-  } else if (editMatch) {
-    action = 'edit';
-    // For demo, not implemented
-  } else if (deleteMatch) {
-    action = 'delete';
-    classData = { subject: deleteMatch[1] };
+  // 1. Use OpenRouter to extract intent
+  const openrouterKey = process.env.OPENROUTER_API_KEY;
+  if (!openrouterKey) {
+    return NextResponse.json({ reply: 'OpenRouter API key not set on server.', schedule });
   }
 
-  if (!action) {
-    return NextResponse.json({ reply: "Sorry, I couldn't understand your request.", schedule });
+  // Compose the system prompt for intent extraction
+  const systemPrompt = `
+You are a helpful assistant for a class scheduling app. 
+Extract the user's intent from their message. 
+Return a JSON object with these fields: action (add, edit, delete), subject, day, time. 
+If the user wants to delete all classes, set action to 'delete_all'.
+If you cannot extract intent, reply with {"error": "Sorry, I couldn't understand your request."}
+User message: "${prompt}"
+`;
+
+  // Call OpenRouter API
+  let aiIntent;
+  let openrouterRes;
+  let openrouterData;
+  try {
+    openrouterRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${openrouterKey}`,
+      },
+      body: JSON.stringify({
+        model: 'openai/gpt-3.5-turbo',
+        messages: [
+          { role: 'system', content: 'You are a helpful assistant for a class scheduling app.' },
+          { role: 'user', content: systemPrompt },
+        ],
+        max_tokens: 100,
+        temperature: 0,
+      }),
+    });
+    openrouterData = await openrouterRes.json();
+    const content = openrouterData.choices?.[0]?.message?.content;
+    aiIntent = JSON.parse(content);
+  } catch (e) {
+    console.error('OpenRouter API error:', e);
+    if (openrouterRes) {
+      try {
+        const text = await openrouterRes.text();
+        console.error('OpenRouter API response:', text);
+      } catch {}
+    } else if (openrouterData) {
+      console.error('OpenRouter API data:', openrouterData);
+    }
+    return NextResponse.json({ reply: "Sorry, I couldn't process your request (AI error).", schedule });
+  }
+
+  if (aiIntent?.error) {
+    return NextResponse.json({ reply: aiIntent.error, schedule });
   }
 
   // 2. Perform the action on Supabase
-  let newSchedule = schedule;
-  if (action === 'add') {
-    // Add class to Supabase
+  let responseText = '';
+  if (aiIntent.action === 'add') {
+    const { subject, day, time } = aiIntent;
+    if (!subject || !day || !time) {
+      return NextResponse.json({ reply: 'Please specify subject, day, and time to add a class.', schedule });
+    }
     const { error } = await supabase.from('classes').insert([
       {
         user_id: user.id,
-        subject: classData.subject,
-        day: classData.day,
-        time: classData.time,
+        subject,
+        day,
+        time,
       },
     ]);
     if (error) {
       return NextResponse.json({ reply: 'Failed to add class.', schedule });
     }
-    responseText = `Added ${classData.subject} class on ${classData.day} at ${classData.time}.`;
-  } else if (action === 'delete') {
-    // Delete class from Supabase
+    responseText = `Added ${subject} class on ${day} at ${time}.`;
+  } else if (aiIntent.action === 'delete') {
+    const { subject } = aiIntent;
+    if (!subject) {
+      return NextResponse.json({ reply: 'Please specify the subject to delete.', schedule });
+    }
     const { error } = await supabase
       .from('classes')
       .delete()
       .eq('user_id', user.id)
-      .eq('subject', classData.subject);
+      .eq('subject', subject);
     if (error) {
       return NextResponse.json({ reply: 'Failed to delete class.', schedule });
     }
-    responseText = `Deleted ${classData.subject} class.`;
-  } else if (action === 'edit') {
-    responseText = 'Edit functionality is not implemented in this demo.';
+    responseText = `Deleted ${subject} class.`;
+  } else if (aiIntent.action === 'edit') {
+    const { subject, day, time } = aiIntent;
+    if (!subject || !day || !time) {
+      return NextResponse.json({ reply: 'Please specify subject, day, and time to edit a class.', schedule });
+    }
+    const { error } = await supabase
+      .from('classes')
+      .update({ day, time })
+      .eq('user_id', user.id)
+      .eq('subject', subject);
+    if (error) {
+      return NextResponse.json({ reply: 'Failed to edit class.', schedule });
+    }
+    responseText = `Updated ${subject} class to ${day} at ${time}.`;
+  } else if (aiIntent.action === 'delete_all') {
+    const { error } = await supabase
+      .from('classes')
+      .delete()
+      .eq('user_id', user.id);
+    if (error) {
+      return NextResponse.json({ reply: 'Failed to delete all classes.', schedule });
+    }
+    responseText = 'Deleted all classes.';
+  } else {
+    return NextResponse.json({ reply: "Sorry, I couldn't understand your request.", schedule });
   }
 
   // 3. Fetch updated schedule

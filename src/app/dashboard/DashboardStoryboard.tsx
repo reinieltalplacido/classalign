@@ -1127,7 +1127,7 @@ function AIChatModalContent({ schedule, userInfo, setSchedule }: { schedule: any
       const data = await res.json();
       if (data.schedule) setSchedule(data.schedule);
       const aiResponse = {
-        id: messages.length + 1,
+        id: Date.now() + Math.random(),
         type: "ai",
         message: data.reply,
         timestamp: new Date(),
@@ -1135,7 +1135,7 @@ function AIChatModalContent({ schedule, userInfo, setSchedule }: { schedule: any
       setMessages((prev) => [...prev, aiResponse]);
     } catch (err) {
       setMessages((prev) => [...prev, {
-        id: messages.length + 1,
+        id: Date.now() + Math.random(),
         type: "ai",
         message: "Sorry, I couldn't connect to the AI service. Please try again later.",
         timestamp: new Date(),
@@ -1148,7 +1148,7 @@ function AIChatModalContent({ schedule, userInfo, setSchedule }: { schedule: any
   const handleSend = async () => {
     if (!input.trim()) return;
     const userMessage = {
-      id: messages.length + 1,
+      id: Date.now() + Math.random(),
       type: "user",
       message: input,
       timestamp: new Date(),
@@ -1166,7 +1166,7 @@ function AIChatModalContent({ schedule, userInfo, setSchedule }: { schedule: any
       const data = await res.json();
       if (data.schedule) setSchedule(data.schedule);
       const aiResponse = {
-        id: messages.length + 2,
+        id: Date.now() + Math.random(),
         type: "ai",
         message: data.reply,
         timestamp: new Date(),
@@ -1174,7 +1174,7 @@ function AIChatModalContent({ schedule, userInfo, setSchedule }: { schedule: any
       setMessages((prev) => [...prev, aiResponse]);
     } catch (err) {
       setMessages((prev) => [...prev, {
-        id: messages.length + 2,
+        id: Date.now() + Math.random(),
         type: "ai",
         message: "Sorry, I couldn't connect to the AI service. Please try again later.",
         timestamp: new Date(),
