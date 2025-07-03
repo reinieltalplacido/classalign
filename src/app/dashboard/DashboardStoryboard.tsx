@@ -149,7 +149,7 @@ export default function DashboardStoryboard() {
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
   // Add user state
-  const [userInfo, setUserInfo] = useState<{ name?: string; email?: string }>({});
+  const [userInfo, setUserInfo] = useState<{ id?: string; name?: string; email?: string }>({});
 
   // Floating AI Chat state
   const [aiChatOpen, setAiChatOpen] = useState(false);
@@ -189,6 +189,7 @@ export default function DashboardStoryboard() {
       }
       // Set user info (prefer full_name, then name, then email)
       setUserInfo({
+        id: user.id,
         name: user.user_metadata?.full_name || user.user_metadata?.name || user.email,
         email: user.email,
       });
@@ -983,7 +984,7 @@ export default function DashboardStoryboard() {
                 </button>
               </div>
               <div className="p-2 bg-gray-50 flex-1 min-h-[350px] max-h-[400px] overflow-y-auto">
-                <AIChatModalContent schedule={classes} />
+                <AIChatModalContent schedule={classes} userInfo={userInfo} setSchedule={setClasses} />
               </div>
             </div>
           )}
@@ -1091,12 +1092,14 @@ export default function DashboardStoryboard() {
   );
 }
 
-function AIChatModalContent({ schedule }: { schedule: any[] }) {
+function AIChatModalContent({ schedule, userInfo, setSchedule }: { schedule: any[], userInfo: { id?: string; name?: string; email?: string }, setSchedule: (s: any[]) => void }) {
   const [messages, setMessages] = useState([
     {
       id: 1,
       type: "ai",
-      message: "Analyzing your current schedule...",
+      message: schedule.length === 0
+        ? "You have no classes scheduled yet. Ask me to add one!"
+        : "Analyzing your current schedule...",
       timestamp: new Date(),
     },
   ]);
@@ -1114,25 +1117,32 @@ function AIChatModalContent({ schedule }: { schedule: any[] }) {
 
   const analyzeSchedule = async () => {
     setIsTyping(true);
-    const aiReply = await askAIScheduler("Analyze my current schedule and suggest improvements.", schedule);
-    const aiResponse = {
-      id: messages.length + 1,
-      type: "ai",
-      message: aiReply,
-      timestamp: new Date(),
-    };
-    setMessages((prev) => [...prev, aiResponse]);
-    setIsTyping(false);
-  };
-
-  const askAIScheduler = async (prompt: string, currentSchedule?: any[]) => {
-    const res = await fetch('/api/ai-schedule', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, schedule: currentSchedule })
-    });
-    const data = await res.json();
-    return data.reply;
+    try {
+      const res = await fetch('/api/ai-schedule-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: "Analyze my current schedule and suggest improvements.", schedule, user: userInfo })
+      });
+      if (!res.ok) throw new Error('API error');
+      const data = await res.json();
+      if (data.schedule) setSchedule(data.schedule);
+      const aiResponse = {
+        id: messages.length + 1,
+        type: "ai",
+        message: data.reply,
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, aiResponse]);
+    } catch (err) {
+      setMessages((prev) => [...prev, {
+        id: messages.length + 1,
+        type: "ai",
+        message: "Sorry, I couldn't connect to the AI service. Please try again later.",
+        timestamp: new Date(),
+      }]);
+    } finally {
+      setIsTyping(false);
+    }
   };
 
   const handleSend = async () => {
@@ -1146,15 +1156,32 @@ function AIChatModalContent({ schedule }: { schedule: any[] }) {
     setMessages([...messages, userMessage]);
     setInput("");
     setIsTyping(true);
-    const aiReply = await askAIScheduler(input, schedule);
-    const aiResponse = {
-      id: messages.length + 2,
-      type: "ai",
-      message: aiReply,
-      timestamp: new Date(),
-    };
-    setMessages((prev) => [...prev, aiResponse]);
-    setIsTyping(false);
+    try {
+      const res = await fetch('/api/ai-schedule-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: input, schedule, user: userInfo })
+      });
+      if (!res.ok) throw new Error('API error');
+      const data = await res.json();
+      if (data.schedule) setSchedule(data.schedule);
+      const aiResponse = {
+        id: messages.length + 2,
+        type: "ai",
+        message: data.reply,
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, aiResponse]);
+    } catch (err) {
+      setMessages((prev) => [...prev, {
+        id: messages.length + 2,
+        type: "ai",
+        message: "Sorry, I couldn't connect to the AI service. Please try again later.",
+        timestamp: new Date(),
+      }]);
+    } finally {
+      setIsTyping(false);
+    }
   };
 
   return (
