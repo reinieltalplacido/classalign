@@ -171,6 +171,11 @@ export default function DashboardStoryboard() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  // Add state for delete all classes modal
+  const [deleteAllModalOpen, setDeleteAllModalOpen] = useState(false);
+  const [deleteAllLoading, setDeleteAllLoading] = useState(false);
+  const [deleteAllError, setDeleteAllError] = useState<string | null>(null);
+
   // Fetch user and classes on mount
   useEffect(() => {
     const fetchUserAndClasses = async () => {
@@ -296,7 +301,14 @@ export default function DashboardStoryboard() {
   };
 
   const handlePrint = () => {
+    const scheduleElement = document.getElementById("schedule-container");
+    if (!scheduleElement) return window.print();
+    const printContents = scheduleElement.outerHTML;
+    const originalContents = document.body.innerHTML;
+    document.body.innerHTML = printContents;
     window.print();
+    document.body.innerHTML = originalContents;
+    window.location.reload();
   };
 
   const handleSavePDF = async () => {
@@ -312,7 +324,6 @@ export default function DashboardStoryboard() {
       }
 
       const canvas = await html2canvas(scheduleElement, {
-        scale: 2,
         useCORS: true,
         allowTaint: true,
       });
@@ -414,6 +425,37 @@ export default function DashboardStoryboard() {
     setDeleteLoading(false);
     setDeleteModalOpen(false);
     setSelectedClass(null);
+  };
+
+  // Delete all classes handler
+  const handleDeleteAllClasses = async () => {
+    setDeleteAllLoading(true);
+    setDeleteAllError(null);
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      setDeleteAllError("Could not get user. Please sign in.");
+      setDeleteAllLoading(false);
+      return;
+    }
+    const { error } = await supabase
+      .from('classes')
+      .delete()
+      .eq('user_id', user.id);
+    if (error) {
+      setDeleteAllError("Failed to delete all classes.");
+      setDeleteAllLoading(false);
+      return;
+    }
+    toast({ title: "All classes deleted!", description: "All your classes were deleted successfully." });
+    // Refresh classes
+    const { data, error: fetchError } = await supabase
+      .from('classes')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: true });
+    setClasses(data || []);
+    setDeleteAllLoading(false);
+    setDeleteAllModalOpen(false);
   };
 
   return (
@@ -523,6 +565,35 @@ export default function DashboardStoryboard() {
                     )}
                     <Button className="w-full" onClick={handleAddClass} disabled={addClassLoading}>
                       {addClassLoading ? 'Adding...' : 'Add Class'}
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+              <Dialog open={deleteAllModalOpen} onOpenChange={setDeleteAllModalOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="destructive" className="flex items-center gap-2">
+                    <Trash2 size={16} />
+                    Delete All
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                      <Trash2 size={20} /> Delete All Classes
+                    </DialogTitle>
+                    <DialogDescription>
+                      Are you sure you want to delete <b>all</b> your classes? This action cannot be undone.
+                    </DialogDescription>
+                  </DialogHeader>
+                  {deleteAllError && (
+                    <div className="text-red-500 text-sm mb-2">{deleteAllError}</div>
+                  )}
+                  <div className="flex gap-2 mt-4">
+                    <Button variant="destructive" onClick={handleDeleteAllClasses} disabled={deleteAllLoading}>
+                      {deleteAllLoading ? 'Deleting...' : 'Delete All'}
+                    </Button>
+                    <Button variant="outline" onClick={() => setDeleteAllModalOpen(false)} disabled={deleteAllLoading}>
+                      Cancel
                     </Button>
                   </div>
                 </DialogContent>
