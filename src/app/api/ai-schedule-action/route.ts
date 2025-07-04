@@ -10,7 +10,8 @@ export async function POST(req: NextRequest) {
   // 1. Use OpenRouter to extract intent
   const openrouterKey = process.env.OPENROUTER_API_KEY;
   if (!openrouterKey) {
-    return NextResponse.json({ reply: 'OpenRouter API key not set on server.', schedule });
+    console.error('OpenRouter API key is missing.');
+    return NextResponse.json({ reply: 'AI service is not configured. Please contact support.', schedule });
   }
 
   // Compose the system prompt for intent extraction
@@ -27,6 +28,8 @@ User message: "${prompt}"
   let aiIntent;
   let openrouterRes;
   let openrouterData;
+  let openrouterText;
+  let intentExtractionFailed = false;
   try {
     openrouterRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
@@ -35,7 +38,7 @@ User message: "${prompt}"
         'Authorization': `Bearer ${openrouterKey}`,
       },
       body: JSON.stringify({
-        model: 'openai/gpt-3.5-turbo',
+        model: 'meta-llama/llama-4-maverick:free',
         messages: [
           { role: 'system', content: 'You are a helpful assistant for a class scheduling app.' },
           { role: 'user', content: systemPrompt },
@@ -44,24 +47,80 @@ User message: "${prompt}"
         temperature: 0,
       }),
     });
-    openrouterData = await openrouterRes.json();
-    const content = openrouterData.choices?.[0]?.message?.content;
-    aiIntent = JSON.parse(content);
-  } catch (e) {
-    console.error('OpenRouter API error:', e);
-    if (openrouterRes) {
-      try {
-        const text = await openrouterRes.text();
-        console.error('OpenRouter API response:', text);
-      } catch {}
-    } else if (openrouterData) {
-      console.error('OpenRouter API data:', openrouterData);
+    openrouterText = await openrouterRes.text();
+    try {
+      openrouterData = JSON.parse(openrouterText);
+    } catch (jsonErr) {
+      console.error('OpenRouter API returned non-JSON:', openrouterText);
+      intentExtractionFailed = true;
     }
-    return NextResponse.json({ reply: "Sorry, I couldn't process your request (AI error).", schedule });
+    if (!openrouterRes.ok) {
+      console.error('OpenRouter API error:', openrouterRes.status, openrouterData);
+      intentExtractionFailed = true;
+    }
+    if (!intentExtractionFailed) {
+      const content = openrouterData.choices?.[0]?.message?.content;
+      if (!content) {
+        console.error('OpenRouter API missing content:', openrouterData);
+        intentExtractionFailed = true;
+      } else {
+        try {
+          aiIntent = JSON.parse(content);
+        } catch (parseErr) {
+          console.error('AI intent JSON parse error:', content);
+          intentExtractionFailed = true;
+        }
+      }
+    }
+  } catch (e) {
+    console.error('OpenRouter API fetch error:', e);
+    if (openrouterRes) {
+      console.error('OpenRouter API response (raw):', openrouterText);
+    }
+    intentExtractionFailed = true;
   }
 
-  if (aiIntent?.error) {
-    return NextResponse.json({ reply: aiIntent.error, schedule });
+  // If intent extraction failed, fallback to general chat
+  if (intentExtractionFailed || aiIntent?.error) {
+    // Fallback: general chat
+    try {
+      const generalChatRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${openrouterKey}`,
+        },
+        body: JSON.stringify({
+          model: 'meta-llama/llama-4-maverick:free',
+          messages: [
+            { role: 'user', content: prompt },
+          ],
+          max_tokens: 200,
+          temperature: 0.7,
+        }),
+      });
+      const generalChatText = await generalChatRes.text();
+      let generalChatData;
+      try {
+        generalChatData = JSON.parse(generalChatText);
+      } catch (jsonErr) {
+        console.error('General chat API returned non-JSON:', generalChatText);
+        return NextResponse.json({ reply: 'AI service returned an invalid response. Please try again later.', schedule });
+      }
+      if (!generalChatRes.ok) {
+        console.error('General chat API error:', generalChatRes.status, generalChatData);
+        return NextResponse.json({ reply: 'AI service is currently unavailable. Please try again later.', schedule });
+      }
+      const chatContent = generalChatData.choices?.[0]?.message?.content;
+      if (!chatContent) {
+        console.error('General chat API missing content:', generalChatData);
+        return NextResponse.json({ reply: 'AI service did not return a valid response. Please try again.', schedule });
+      }
+      return NextResponse.json({ reply: chatContent, schedule });
+    } catch (e) {
+      console.error('General chat API fetch error:', e);
+      return NextResponse.json({ reply: 'AI service is unreachable. Please check your connection or try again later.', schedule });
+    }
   }
 
   // 2. Perform the action on Supabase
